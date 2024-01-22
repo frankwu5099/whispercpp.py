@@ -21,6 +21,7 @@ cdef int N_THREADS = os.cpu_count()
 
 MODELS = {
     'ggml-tiny.bin': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
+    'ggml-tiny.en.bin': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
     'ggml-base.bin': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
     'ggml-small.bin': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
     'ggml-medium.bin': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin',
@@ -120,7 +121,6 @@ cdef class Whisper:
         return whisper_full(self.ctx, self.params, &frames[0], len(frames))
     
     def extract_text(self, int res):
-        print("Extracting text...")
         if res != 0:
             raise RuntimeError
         cdef int n_segments = whisper_full_n_segments(self.ctx)
@@ -128,4 +128,40 @@ cdef class Whisper:
             whisper_full_get_segment_text(self.ctx, i).decode() for i in range(n_segments)
         ]
 
+    def extract_timestamp(self, int res):
+        if res != 0:
+            raise RuntimeError
+        cdef int n_segments = whisper_full_n_segments(self.ctx)
+        return [
+            whisper_full_get_segment_t0(self.ctx, i) for i in range(n_segments)
+        ], [
+            whisper_full_get_segment_t1(self.ctx, i) for i in range(n_segments)
+        ]
 
+    def extract_token_level(self, int res):
+        if res != 0:
+            raise RuntimeError
+        cdef int n_segments = whisper_full_n_segments(self.ctx)
+        return [[
+            whisper_full_get_token_p(self.ctx, i, j) for j in range(whisper_full_n_tokens(self.ctx, i))
+        ] for i in range(n_segments)
+        ], [[
+            whisper_full_get_token_text(self.ctx, i, j).decode() for j in range(whisper_full_n_tokens(self.ctx, i))
+        ] for i in range(n_segments)]
+    
+    def extract_segments(self, int res):
+        if res != 0:
+            raise RuntimeError
+        return {
+            'segments': [
+                {
+                    'start': t0/100.,
+                    'end': t1/100.,
+                    'text': text,
+                    'words': [
+                        {'score':score, 'word': tok} for score, tok in zip(scores, toks) if '[_' not in tok
+                    ]
+                }
+                for text, t0, t1, scores, toks in zip(self.extract_text(res), *self.extract_timestamp(res), *self.extract_token_level(res))
+            ]
+        }
