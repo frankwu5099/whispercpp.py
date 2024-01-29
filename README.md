@@ -4,7 +4,7 @@ My fork version of whisper.cpp.py.
 - Providing time stamps
 - Providing word-level info
 
-===============================
+
 info from original authors are below.
 ===============================
 
